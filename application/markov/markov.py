@@ -25,9 +25,9 @@ class MarkovChain:
 
 			new = random.choice(self.chain[word])
 			if (word.capitalize() == new):
-				sentence += '. ' + new
+				sentence += ". " + new
 			else:
-				sentence += ' ' + new
+				sentence += " " + new
 			word = new
 
 		return sentence
@@ -35,7 +35,7 @@ class MarkovChain:
 	def export(self, targetfile):
 		with open(targetfile, "w") as handle:
 			for word in self.chain.keys():
-				handle.write('%s:' % word)
+				handle.write("%s:" % word)
 				for sub_word in self.chain[word]:
 					handle.write('%s:' % sub_word)
 				handle.write('\n')
@@ -60,9 +60,9 @@ class MarkovChain:
 		return random.choice(self.chain.keys())
 
 	def append(self, input):
-		input = input.strip('!?.,\";]')
+		input = input.strip("!?.,\";]")
 
-		words = input.split(' ')
+		words = input.split(" ")
 		for index, current_word in enumerate(words):
 			if (index != 0):
 				previous_word = words[index-1]
@@ -71,11 +71,11 @@ class MarkovChain:
 				self.chain[previous_word].append(current_word)
 				#self.chain[previous_word].setdefault(previous_word, []).append(current_word)
 
-class Addon:
+class Addon(object):
 	markov = None
 	count = 0
 
-	def __init__(self, connection):
+	def __init__(self, connection, scheduler):
 		self.connection = connection
 		signal('on_receive').connect(self.on_receive)
 		signal('on_receive_private').connect(self.on_receive_private)
