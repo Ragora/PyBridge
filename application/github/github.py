@@ -15,7 +15,7 @@ class Addon(object):
 	}
 
 	last_sha = None
-	api_call_counter = None
+	api_call_counter = 0
 	api_call_limit = 5000
 
 	def __init__(self, connection, scheduler):
@@ -81,7 +81,7 @@ class Addon(object):
 				date_delta = now - date
 
 				seconds_ago = abs(date_delta.seconds)
-				if (seconds_ago >= 20):
+				if ((date.day != now.day or date.month != now.month or date.year != now.year) or seconds_ago >= 20):
 					continue
 
 				# A commit
