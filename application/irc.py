@@ -146,10 +146,12 @@ class Connection(object):
         received_data = None
         try:
             while True:
-                received_data = self._socket.recv(self.global_configuration["chunksize"]).decode("utf8")
-                self.buffer += received_data
-                self.total_timeout_time = datetime.timedelta(seconds=0)
-                received_data = None
+                readable, writable, exceptional = select.select([self._socket], [], [], 0.01)
+                if len(readable) != 0:
+                    received_data = self._socket.recv(self.global_configuration["chunksize"]).decode("utf8")
+                    self.buffer += received_data
+                    self.total_timeout_time = datetime.timedelta(seconds=0)
+                    received_data = None
         except socket.timeout as e:
             if received_data is not None:
                 self.buffer += received_data
@@ -165,7 +167,8 @@ class Connection(object):
         except socket.error as e:
             error = e.args[0]
             if error == errno.EAGAIN or error == errno.EWOULDBLOCK:
-                return
+                if received_data is not None:
+                    self.buffer += received_data
 
             if self.debug_prints_enabled is True:
                 print("Disconnected from server -- attempting reconnection ...")
@@ -180,7 +183,6 @@ class Connection(object):
             self.buffer = split.pop()
 
             for return_buffer in split:
-                # print(return_buffer)
                 return_buffer = return_buffer[1:]
 
                 words = return_buffer.split()
@@ -268,7 +270,7 @@ class Connection(object):
                             username = hostmask.split("!", 1)[0]
 
                             if username == self.username:
-                                return
+                                continue
 
                             self.channel_users[channel].add(username)
                             self.dispatch_event("OnJoin", username=username, hostmask=hostmask, channel=channel)
@@ -280,7 +282,7 @@ class Connection(object):
                             message = " ".join(words[3:])[1:]
 
                             if username == self.username:
-                                return
+                                continue
 
                             if username in self.channel_users[channel]:
                                 self.channel_users[channel].remove(username)
