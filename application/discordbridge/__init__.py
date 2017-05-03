@@ -1,0 +1,1 @@
+from .discordbridge import Addon

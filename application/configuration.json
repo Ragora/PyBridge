@@ -1,0 +1,21 @@
+{
+    "sleepms": 32,
+    "chunksize": 4096,
+    "timeoutseconds": 30,
+    "pingseconds": 20,
+    "autorestart": false,
+
+    "servers": [
+        {
+            "host": "irc.yourserver.net",
+            "port": 6667,
+            "channels": ["channels", "to", "join"],
+            "username": "BotName",
+            "password": null,
+
+            "addons": [
+                "addons", "to", "load"
+            ]
+        }
+    ],
+}
