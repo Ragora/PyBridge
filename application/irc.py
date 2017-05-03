@@ -244,7 +244,7 @@ class Connection(object):
                         new_username = words[2][1:]
 
                         for channel_name, channel_users in zip(self.channel_users.keys(), self.channel_users.values()):
-                            if username in channel_users:
+                            if old_username in channel_users:
                                 channel_users.remove(old_username)
                                 channel_users.add(new_username)
 
