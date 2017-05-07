@@ -26,7 +26,12 @@ class Connection(object):
 
     """ The nickname of the bot to use in the server. """
     server = None
+
     password = None
+    """
+        The password that the bot will use to authenticate against NickServ with. This is only temporarily
+        stored and is rewritten with None upon authentication.
+    """
 
     """ The IP address of the server to connect to. """
     channel = None
@@ -35,10 +40,10 @@ class Connection(object):
     scheduler = None
     commands = None
 
-    _socket = None
+    socket = None
     """ The internal socket that the client will use. """
 
-    _performed_identification = None
+    performed_identification = None
 
     event_handlers = None
 
@@ -89,10 +94,10 @@ class Connection(object):
 
         self.addons = []
         self.commands = {}
-        self.channel_users = {}
+        self.channel_users = {channel: set() for channel in self.channels}
         self.buffer = ""
 
-        self._performed_identification = False
+        self.performed_identification = False
 
         self.send("NICK %s" % self.username)
         self.send("USER %s" % self.nickname)
@@ -108,26 +113,26 @@ class Connection(object):
         """
             Closes the connection with the IRC server.
         """
-        self._socket.close()
+        self.socket.close()
 
     def reconnect(self):
         self.buffer = ""
-        if self._socket is not None:
-            self._socket.close()
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect(self.connection_info)
-        self._socket.setblocking(False)
-        self._socket.settimeout(0.03)
+        if self.socket is not None:
+            self.socket.close()
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect(self.connection_info)
+        self.socket.setblocking(False)
+        self.socket.settimeout(0.03)
         return True
 
     def send(self, string):
-        self._socket.send(bytes("%s\r\n" % string, "utf8"))
+        self.socket.send(bytes("%s\r\n" % string, "utf8"))
 
     def say(self, string, channel):
-        self._socket.send(bytes('PRIVMSG #%s :%s\r\n' % (channel, string), "utf8"))
+        self.socket.send(bytes('PRIVMSG #%s :%s\r\n' % (channel, string), "utf8"))
 
     def say_to(self, name, string):
-        self._socket.send(bytes('PRIVMSG %s :%s\r\n' % (name, string), "utf8"))
+        self.socket.send(bytes('PRIVMSG %s :%s\r\n' % (name, string), "utf8"))
 
     def update(self, delta_time):
         """
@@ -146,12 +151,10 @@ class Connection(object):
         received_data = None
         try:
             while True:
-                readable, writable, exceptional = select.select([self._socket], [], [], 0.01)
-                if len(readable) != 0:
-                    received_data = self._socket.recv(self.global_configuration["chunksize"]).decode("utf8")
-                    self.buffer += received_data
-                    self.total_timeout_time = datetime.timedelta(seconds=0)
-                    received_data = None
+                received_data = self.socket.recv(self.global_configuration["chunksize"]).decode("utf8")
+                self.buffer += received_data
+                self.total_timeout_time = datetime.timedelta(seconds=0)
+                received_data = None
         except socket.timeout as e:
             if received_data is not None:
                 self.buffer += received_data
@@ -167,8 +170,7 @@ class Connection(object):
         except socket.error as e:
             error = e.args[0]
             if error == errno.EAGAIN or error == errno.EWOULDBLOCK:
-                if received_data is not None:
-                    self.buffer += received_data
+                return
 
             if self.debug_prints_enabled is True:
                 print("Disconnected from server -- attempting reconnection ...")
@@ -183,6 +185,7 @@ class Connection(object):
             self.buffer = split.pop()
 
             for return_buffer in split:
+                # print(return_buffer)
                 return_buffer = return_buffer[1:]
 
                 words = return_buffer.split()
@@ -237,20 +240,23 @@ class Connection(object):
                             self.dispatch_event("OnReceivePrivate", username=sending_user, message=message_data)
 
                     # Handles for nick
-                    elif words[1] == "NOTICE" and "nickserv" in words[0].lower() and not self._performed_identification and "registered" in return_buffer and self.password is not None:
+                    elif words[1] == "NOTICE" and "nickserv" in words[0].lower() and not self.performed_identification and "registered" in return_buffer and self.password is not None:
                         self.say_to("NickServ", "IDENTIFY %s" % self.password)
-                        self._performed_identification = True
+                        self.performed_identification = True
+                        self.password = None
                     elif words[1] == "NICK":
                         hostmask = words[0]
                         old_username = hostmask.split("!", 1)[0]
                         new_username = words[2][1:]
 
+                        channels = set()
                         for channel_name, channel_users in zip(self.channel_users.keys(), self.channel_users.values()):
                             if old_username in channel_users:
+                                channels.add(channel_name)
                                 channel_users.remove(old_username)
                                 channel_users.add(new_username)
 
-                        self.dispatch_event("OnUsernameChange", old_username=old_username, new_username=new_username, hostmask=hostmask)
+                        self.dispatch_event("OnUsernameChange", old_username=old_username, new_username=new_username, hostmask=hostmask, channels=channels)
                     elif words[1] == "QUIT":
                         hostmask = words[0]
                         username = hostmask.split("!", 1)[0]
@@ -270,7 +276,7 @@ class Connection(object):
                             username = hostmask.split("!", 1)[0]
 
                             if username == self.username:
-                                continue
+                                return
 
                             self.channel_users[channel].add(username)
                             self.dispatch_event("OnJoin", username=username, hostmask=hostmask, channel=channel)
@@ -282,7 +288,7 @@ class Connection(object):
                             message = " ".join(words[3:])[1:]
 
                             if username == self.username:
-                                continue
+                                return
 
                             if username in self.channel_users[channel]:
                                 self.channel_users[channel].remove(username)

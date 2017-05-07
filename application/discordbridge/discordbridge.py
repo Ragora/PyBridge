@@ -174,7 +174,7 @@ class Addon(object):
 
                         for irc_channel in irc_channels:
                             for channel in discord_channels:
-                                if channel.name in self.irc_to_discord[irc_channel] or int(channel.id) in self.irc_to_discord[irc_channel]:
+                                if irc_channel in self.irc_to_discord and channel.name in self.irc_to_discord[irc_channel] or int(channel.id) in self.irc_to_discord[irc_channel]:
                                     recipient_discord_channels.append(channel)
 
                             for recipient_discord_channel in recipient_discord_channels:
@@ -282,6 +282,13 @@ class Addon(object):
 
             if author not in self.configuration["discordblacklist"]:
                 message_content = message.clean_content
+                message_content = message_content.rstrip().lstrip()
+                message_content = message_content if len(message_content) != 0 else "(No Message)"
+
+                # If the content is empty, process attachments.
+                attachments_content = ""
+                if len(message.attachments) != 0:
+                    attachments_content = "(Attachments: %s ): " % " ".join([attachment["url"] for attachment in message.attachments])
 
                 # Produce the replacements before altering the string we are searching
                 while True:
@@ -320,9 +327,9 @@ class Addon(object):
                         author = author + old_author[1:]
 
                     if user_color is not None:
-                        formatted_message = "\x02<\x03%s%s\x03>\x02 %s" % (user_color, author, message_content)
+                        formatted_message = "\x02<\x03%s%s\x03>\x02 %s %s" % (user_color, author, attachments_content, message_content)
                     else:
-                        formatted_message = "\x02<%s>\x02 %s" % (author, message_content)
+                        formatted_message = "\x02<%s>\x02 %s %s" % (author, attachments_content, message_content)
 
                     for recipient_irc_channels, connections in mapped_channels:
                         for recipient_irc_channel in recipient_irc_channels:
@@ -335,7 +342,7 @@ class Addon(object):
     def get_commands(self):
         return {}
 
-    def on_username_change(self, old_username, new_username, hostmask):
+    def on_username_change(self, old_username, new_username, hostmask, channels):
         """
             Event handler for when people change their usernames in the IRC.
 
@@ -347,7 +354,7 @@ class Addon(object):
             return
 
         self.discord_thread.incoming_lock.acquire()
-        self.discord_thread.incoming_messages.append((None, "**%s** changed their nickname to **%s**." % (old_username, new_username)))
+        self.discord_thread.incoming_messages.append((channels, "**%s** changed their nickname to **%s**." % (old_username, new_username)))
         self.discord_thread.incoming_lock.release()
 
     def on_join(self, username, hostmask, channel):

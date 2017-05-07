@@ -129,7 +129,20 @@ class Application(object):
 
                     self.connections = []
         else:
-            self.setup_and_run(configuration_data)
+            try:
+                self.setup_and_run(configuration_data)
+            except Exception as e:
+                traceback_text = traceback.format_exc()
+                print("!!! Encountered an unhandled exception: %s" % traceback_text)
+                print("!!! Exiting because autorestart is not enabled!")
+
+                # Stop all running addons
+                for addon in self.loaded_addons:
+                    addon.stop()
+
+                # Stop all connections
+                for connection in self.connections:
+                    connection.disconnect()
 
 if __name__ == "__main__":
     Application().main()
