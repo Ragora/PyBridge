@@ -295,6 +295,26 @@ class Addon(object):
                     generated_replacements = {}
                     for discord_pattern, irc_patterns in zip(self.DISCORD_TO_IRC_FORMATS.keys(), self.DISCORD_TO_IRC_FORMATS.values()):
                         for match in re.finditer(discord_pattern, message_content):
+                            """
+                                We need to perform processing for locating URL's in our matching sequences so the underscore characters
+                                aren't formatted into IRC URL's and screwing them.
+                            """
+                            match_start = match.start()
+                            http_location = message_content.rfind("http://", None, match_start)
+                            https_location = message_content.rfind("https://", None, match_start)
+
+                            hypertext_start = None
+                            if http_location != -1:
+                                hypertext_start = http_location
+                            elif https_location != -1:
+                                hypertext_start = https_location
+
+                            # If there is a found hypertext, check if there is any spaces
+                            if hypertext_start is not None:
+                                potential_url = message_content[hypertext_start:match.end()]
+                                if " " not in potential_url:
+                                    continue
+
                             irc_pattern_index = len(match.group(1)) - 1
                             generated_replacements[match.group(0)] = irc_patterns[irc_pattern_index] % match.group(2)
 
