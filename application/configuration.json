@@ -1,0 +1,91 @@
+{
+    "globalConfiguration": {
+        "processInternal": {
+            "sleepMS": 32,
+            "autoRestart": false
+        },
+
+        "imageHosting": {
+            "enabled": true,
+            "imagePathBase": "/var/www/html/images",
+            "documentPathBase": "/var/www/html/images",
+            "imageURLBase": "https://yoururl.com/images",
+            "documentURLBase": "https://yoururl.com/images",
+
+            "storageQuota": {
+                "enabled": false,
+                "size": 100,
+                "unit": "GB",
+                "declineMessage": "Bot at storage quota. Cannot store document."
+            },
+
+            "uploadQuota": {
+                "enabled": false,
+                "size": 1,
+                "unit": "GB",
+                "declineMessage": "File too big for the bot to host."
+            },
+
+            "outOfStorageMessage": "Bot at maximum storage capacity. Cannot store document."
+        },
+
+        "bridgeDefaultGenericConfig": {
+            "broadcastMessages": true,
+            "broadcastJoinLeaves": true,
+            "broadcastNameChanges": true,
+
+            "largeBlockDelaySeconds": 2,
+
+            "broadCastingChannels": [
+                "broadcastingChannel",
+            ],
+
+            "receivingChannels": [
+                "receivingChannels"
+            ],
+
+            "ignoreSenders": ["ugnoredSender"]
+        }
+    },
+
+    "domains": [
+        {
+            "name": "YourDomain",
+
+            "bridges": [
+                {
+                    "name": "Discord",
+                    "bridge": "discordbridge",
+
+                    "bridgeGenericConfig": {
+
+                    },
+
+                    "bridgeInternalConfig": {
+                        "token": "yourToken"
+                    }
+                },
+
+                {
+                    "name": "IRC",
+                    "bridge": "ircbridge",
+
+                    "bridgeGenericConfig": {
+
+                    },
+
+                    "bridgeInternalConfig": {
+                        "port": 6667,
+                        "receiveSize": 4096,
+                        "pingSeconds": 20,
+                        "enableUserColors": true,
+                        "host": "irc.yourserver.net",
+
+                        "username": "YourUsername",
+                        "password": null
+                    }
+                },
+            ]
+        }
+    ]
+}
