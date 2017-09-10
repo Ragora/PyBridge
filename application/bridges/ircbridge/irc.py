@@ -119,7 +119,7 @@ class Connection(object):
         self.total_timeout_time = datetime.timedelta(seconds=0)
         self.debug_prints_enabled = False
 
-        self.channel_users = {}
+        self.channel_users = {channel: set() for channel in channels}
 
         # Ensure all of the responders are lists
         for event_name, responder in zip(self.event_handlers.keys(), self.event_handlers.values()):
@@ -240,13 +240,9 @@ class Connection(object):
 
                             self.dispatch_event("OnUserListPopulate", username=user, channel=channel_name)
                     elif words[1] == "004":
-                        for channel in self.channels:
-                            time.sleep(0.05)
-                            self.send("JOIN #%s" % channel)
-
-                        #for channel in self.channels:
-                        #    time.sleep(0.05)
-                        #    self.send("NAMES #%s" % channel)
+                        channels = ",".join(["#%s" % channel for channel in self.channels])
+                        self.send("JOIN %s" % channels)
+                        self.send("NAMES %s" % channels)
                     elif (words[1] == "PRIVMSG" and words[2].lstrip("#") in self.channels):
                         channel = words[2].lstrip("#")
                         sending_user = words[0].split("!")

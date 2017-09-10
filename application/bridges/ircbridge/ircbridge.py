@@ -68,11 +68,12 @@ class Bridge(BridgeBase):
         self.DISCORD_TO_IRC_FORMATS["(\_{1,4})([^_]+)\\1"] = ["\x1D%s\x1D", "\x1F%s\x1F", "\x1D\x1F%s\x1F\x1D", "\x1F%s\x1F"]
         self.DISCORD_TO_IRC_FORMATS["(~{2,})([^_]+)\\1"] = self.handle_strikethrough_format
 
+        channels = set(self.configuration.bridge_generic_config.broadcasting_channels + self.configuration.bridge_generic_config.receiving_channels)
         self.connection = Connection(address=self.configuration.bridge_internal_config["host"],
                                      port=self.configuration.bridge_internal_config["port"],
                                      username=self.configuration.bridge_internal_config["username"],
                                      ping_delay=datetime.timedelta(seconds=self.configuration.bridge_internal_config["pingSeconds"]),
-                                     channels=self.configuration.bridge_generic_config.broadcasting_channels + self.configuration.bridge_generic_config.receiving_channels,
+                                     channels=list(channels),
                                      password=self.configuration.bridge_internal_config["password"] if "password" in self.configuration.bridge_internal_config else None,
                                      event_handlers=event_handlers)
 
