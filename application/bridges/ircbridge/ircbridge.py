@@ -4,9 +4,11 @@
     Code to provide discord IRC bridging.
 """
 
+import os
 import re
 import sys
 import time
+import json
 import random
 import socket
 import asyncio
@@ -54,6 +56,11 @@ class Bridge(BridgeBase):
         """
 
         self.user_color_maps = {}
+        color_file_path = self.get_data_path("userColors.json")
+        if os.path.exists(color_file_path):
+            with open(color_file_path, "r") as handle:
+                self.user_color_maps = json.loads(handle.read())
+
         self.register_event("on_receive_message", self.on_receive_message)
 
         event_handlers = {
@@ -80,16 +87,20 @@ class Bridge(BridgeBase):
         self.userlist = {}
 
     def handle_irc_join(self, username, channel, hostmask):
-        self.application.broadcast_event("on_receive_join", sender=self, joined_name=username, target_channels=[channel])
+        if self.configuration.bridge_generic_config.broadcast_join_leaves:
+            self.application.broadcast_event("on_receive_join", sender=self, joined_name=username, target_channels=[channel])
 
     def handle_irc_part(self, username, channel, hostmask, message):
-        self.application.broadcast_event("on_receive_leave", sender=self, left_name=username, target_channels=[channel])
+        if self.configuration.bridge_generic_config.broadcast_join_leaves:
+            self.application.broadcast_event("on_receive_leave", sender=self, left_name=username, target_channels=[channel])
 
     def handle_irc_quit(self, username, message, hostmask, channels):
-        self.application.broadcast_event("on_receive_leave", sender=self, left_name=username, target_channels=channels)
+        if self.configuration.bridge_generic_config.broadcast_join_leaves:
+            self.application.broadcast_event("on_receive_leave", sender=self, left_name=username, target_channels=channels)
 
     def handle_irc_message(self, username, message, channel):
-        self.application.broadcast_event("on_receive_message", sender=self, sender_name=username, message=message, target_channels=[channel])
+        if self.configuration.bridge_generic_config.broadcast_messages:
+            self.application.broadcast_event("on_receive_message", sender=self, sender_name=username, message=message, target_channels=[channel])
 
     def send(self, sender, message, target_channels):
         message_lines = message.replace("\r", "").split("\n")
@@ -105,8 +116,27 @@ class Bridge(BridgeBase):
                 if sender_name in self.user_color_maps.keys():
                     user_color = self.user_color_maps[sender_name]
                 else:
-                    user_color = "%02d" % random.randint(2, 15)
-                    self.user_color_maps[sender_name] = user_color
+                    # Initialize the color counts so currently unused colors are viable selections
+                    color_counts = {}
+                    for color in range(2, 15):
+                        color_counts.setdefault(color, 0)
+
+                    # Count color instances
+                    for color in self.user_color_maps.values():
+                        color_counts[color] += 1
+
+                    # Once we have colors counted, pick the lowest used set of colors.
+                    lowest_count = min(color_counts.values())
+                    color_selection = [color for color, count in zip(color_counts.keys(), color_counts.values()) if count == lowest_count]
+                    color_selection = random.choice(color_selection)
+                    self.user_color_maps[sender_name] = color_selection
+
+                    # Write the new color file.
+                    color_file_path = self.get_data_path("userColors.json")
+                    with open(color_file_path, "w") as handle:
+                        handle.write(json.dumps(self.user_color_maps, sort_keys=True, separators=(", ", ":"), indent=4))
+
+                    user_color = "%02d" % color_selection
 
             # Fixes people pinging themselves in IRC if they are also connected here
             old_sender = sender_name
@@ -126,7 +156,6 @@ class Bridge(BridgeBase):
 
                         #    We need to perform processing for locating URL's in our matching sequences so the underscore characters
                         #    aren't formatted into IRC URL's and screwing them.
-
                         match_start = match.start()
                         http_location = message.rfind("http://", None, match_start)
                         https_location = message.rfind("https://", None, match_start)

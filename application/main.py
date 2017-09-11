@@ -52,6 +52,12 @@ class Application(object):
             starting everything.
         """
 
+        # Configure the home path.
+        home_path = os.path.expanduser("~") + "/.pyBridge/"
+        home_exists = os.path.exists(home_path)
+        if home_exists is False:
+            os.mkdir(home_path)
+
         # Load the addons
         self.loaded_addons = []
 
@@ -63,7 +69,7 @@ class Application(object):
 
                 try:
                     module = importlib.import_module("bridges.%s" % bridge_name)
-                    addon_instance = module.Bridge(self, bridge, configuration_data)
+                    addon_instance = module.Bridge(self, home_path, bridge, configuration_data)
                     self.loaded_addons.append(addon_instance)
 
                     domain_bridges.append(addon_instance)
@@ -133,13 +139,7 @@ class Application(object):
             addon.receive_event(sender=sender, name=name, *args, **kwargs)
 
     def main(self):
-        home_path = os.path.expanduser("~") + "/.pyIRCBot/"
-        home_exists = os.path.exists(home_path)
-        if home_exists is False:
-            os.mkdir(home_path)
-
         configuration_data = bridgesystem.Configuration.from_file("configuration.json")
-
         if configuration_data.global_configuration.process_internal.auto_restart is True:
             while configuration_data.global_configuration.process_internal.auto_restart is True:
                 try:

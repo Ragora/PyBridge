@@ -48,13 +48,14 @@ class BridgeBase(object):
 
     global_configuration = None
 
-    def __init__(self, application, configuration, global_configuration):
+    def __init__(self, application, home_path, configuration, global_configuration):
         """
             Base initialize function to create empty lambdas for the base event types. Events of other types may be specified,
             but these at the least should be defined for interoperability.
 
             :param configuration: The configuration data in use for this addon.
         """
+        self.home_path = home_path
         self.event_map = {}
         self.application = application
         self.configuration = configuration
@@ -82,7 +83,7 @@ class BridgeBase(object):
         for responder in self.event_map[name]:
             try:
                 responder(*args, **kwargs)
-            except StandardError as e:
+            except Exception as e:
                 pass
                 # FIXME: Process and log the error in some way.
 
@@ -149,6 +150,13 @@ class BridgeBase(object):
         for removed_sender in removed_senders:
             del self.long_block_buffers[removed_sender]
             del self.last_long_block_process[removed_sender]
+
+    def get_data_path(self, path):
+        # The bridge folder should exist
+        bridge_path = os.path.join(self.home_path, self.configuration.name)
+        if os.path.exists(bridge_path) is False:
+            os.mkdir(bridge_path)
+        return os.path.join(bridge_path, path)
 
     def get_hosted_image_local_path(self, name):
         return os.path.join(self.global_configuration.global_configuration.image_hosting.image_path_base, name)

@@ -56,7 +56,7 @@ class Bridge(BridgeBase):
         we should initiate reconnection attempts.
     """
 
-    def __init__(self, application, configuration):
+    def __init__(self, application, home_path, configuration, global_configuration):
         super(Addon, self).__init__(application, configuration)
         self.message_buffer = ""
         self.receive_buffer_size = int(self.configuration["receiveSize"])

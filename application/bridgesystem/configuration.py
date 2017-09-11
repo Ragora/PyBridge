@@ -136,6 +136,9 @@ class Domain(ConfigurationBase):
             broadcast_name_changes = ConfigurationBase.ConfigurationValue(name="broadcastNameChanges", default=None, value_constructor=bool)
             broadcast_messages = ConfigurationBase.ConfigurationValue(name="broadcastMessages", default=None, value_constructor=bool)
             broadcast_join_leaves = ConfigurationBase.ConfigurationValue(name="broadcastJoinLeaves", default=None, value_constructor=bool)
+            receive_name_changes = ConfigurationBase.ConfigurationValue(name="receiveNameChanges", default=None, value_constructor=bool)
+            receive_messages = ConfigurationBase.ConfigurationValue(name="receiveMessages", default=None, value_constructor=bool)
+            receive_join_leaves = ConfigurationBase.ConfigurationValue(name="receiveJoinLeaves", default=None, value_constructor=bool)
             broadcasting_channels = ConfigurationBase.ConfigurationValue(name="broadCastingChannels", default=None, value_constructor=list)
             receiving_channels = ConfigurationBase.ConfigurationValue(name="receivingChannels", default=None, value_constructor=list)
             large_block_delay_seconds = ConfigurationBase.ConfigurationValue(name="largeBlockDelaySeconds", default=None, value_constructor=float)
@@ -238,6 +241,9 @@ class GlobalConfiguration(ConfigurationBase):
         receiving_channels = ConfigurationBase.ConfigurationValue(name="receivingChannels", default=[], value_constructor=list)
         large_block_delay_seconds = ConfigurationBase.ConfigurationValue(name="largeBlockDelaySeconds", default=datetime.timedelta(seconds=2), value_constructor=lambda input: datetime.timedelta(seconds=input))
         broadcast_name_changes = ConfigurationBase.ConfigurationValue(name="broadcastNameChanges", default=True, value_constructor=bool)
+        receive_name_changes = ConfigurationBase.ConfigurationValue(name="receiveNameChanges", default=True, value_constructor=bool)
+        receive_messages = ConfigurationBase.ConfigurationValue(name="receiveMessages", default=True, value_constructor=bool)
+        receive_join_leaves = ConfigurationBase.ConfigurationValue(name="receiveJoinLeaves", default=True, value_constructor=bool)
 
         def __init__(self, configuration={}):
             super(GlobalConfiguration.BridgeDefaultGenericConfig, self).__init__(configuration)

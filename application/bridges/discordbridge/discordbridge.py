@@ -172,8 +172,8 @@ class Bridge(BridgeBase):
             queued_calls = [self.discord_connection.logout(), self.discord_connection.close()]
             discord.compat.create_task(asyncio.wait(queued_calls))
 
-    def __init__(self, application, configuration, global_configuration):
-        super(Bridge, self).__init__(application, configuration, global_configuration)
+    def __init__(self, application, home_path, configuration, global_configuration):
+        super(Bridge, self).__init__(application, home_path, configuration, global_configuration)
 
         self.discord_user_color_maps = {}
 
@@ -269,11 +269,12 @@ class Bridge(BridgeBase):
                 else:
                     message_content = "(Discord Attachment: %s): %s" % (message_content, "\n".join([attachment["url"] for attachment in message.attachments]))
 
-            self.application.broadcast_event("on_receive_message",
-            sender=self,
-            sender_name=author,
-            message=message_content,
-            target_channels=[message.channel.name])
+            if self.configuration.bridge_generic_config.broadcast_messages and author not in self.configuration.bridge_generic_config.ignore_senders:
+                self.application.broadcast_event("on_receive_message",
+                sender=self,
+                sender_name=author,
+                message=message_content,
+                target_channels=[message.channel.name])
 
         self.discord_thread.outgoing_messages = []
         self.discord_thread.outgoing_lock.release()
@@ -281,104 +282,24 @@ class Bridge(BridgeBase):
     def get_commands(self):
         return {}
 
-    def on_username_change(self, old_username, new_username, hostmask, channels):
-        """
-            Event handler for when people change their usernames in the IRC.
-
-            :param old_username: The username that was transferred from.
-            :param new_username: The username that was transferred to.
-            :param hostmask: The hostmask.
-        """
-        if self.configuration.bridge_generic_config.broadcast_name_changes is False or old_username in self.configuration.bridge_generic_config.ignore_senders or new_username in self.configuration.bridge_generic_config.ignore_senders:
-            return
-
-        self.discord_thread.incoming_lock.acquire()
-        self.discord_thread.incoming_messages.append((channels, "**%s** changed their nickname to **%s**." % (old_username, new_username)))
-        self.discord_thread.incoming_lock.release()
-
-    def on_join(self, username, hostmask, channel):
-        """
-            Event handler for when people join an IRC channel that the bot is in.
-
-            :param username: The username of the person connecting.
-            :param hostmask: The hostmask.
-            :param channel: The name of the channel they joined.
-        """
-        if self.configuration["dispatchjoinevents"] is False or username in self.configuration.bridge_generic_config.ignore_senders:
-            return
-
-        self.discord_thread.incoming_lock.acquire()
-        self.discord_thread.incoming_messages.append((channel, "**%s** joined #%s." % (username, channel)))
-        self.discord_thread.incoming_lock.release()
-
-    def on_part(self, username, hostmask, message, channel):
-        """
-            Event handler for when people part from an IRC channel the bot is in.
-
-            :param username: The username of the person connecting.
-            :param hostmask: The hostmask.
-            :param message: The part message.
-            :param channel: The name of the channel they joined.
-        """
-        if self.configuration["dispatchpartevents"] is False or username in self.configuration.bridge_generic_config.ignore_senders:
-            return
-
-        self.discord_thread.incoming_lock.acquire()
-        message = message.lstrip().rstrip()
-        message = ": %s" % message if len(message) != 0 else ""
-        self.discord_thread.incoming_messages.append((channel, "**%s** left #%s%s" % (username, channel, message)))
-        self.discord_thread.incoming_lock.release()
-
-    def on_receive_pose(self, username, message, channel):
-        """
-            Event handler for when people use the ACTION command in IRC.
-
-            :param username: The username of the person connecting.
-            :param message: The pose message.
-            :param channel: The name of the channel they sent the message to.
-        """
-        if self.configuration.bridge_generic_config.broadcast_messages is False or username in self.configuration.bridge_generic_config.ignore_senders:
-            return
-
-        self.discord_thread.incoming_lock.acquire()
-        self.discord_thread.incoming_messages.append((channel, "**<%s>** _%s_" % (username, message)))
-        self.discord_thread.incoming_lock.release()
-
-    def on_quit(self, username, message, hostmask, channels):
-        """
-            Event handler for when people leave the IRC server.
-
-            :param username: The username of the person quitting.
-            :param message: The quit message.
-            :param hostmask: The hostmask.
-        """
-        if self.configuration.bridge_generic_config.broadcast_join_leaves is False or username in self.configuration.bridge_generic_config.ignore_senders:
-            return
-
-        self.discord_thread.incoming_lock.acquire()
-        message = message.lstrip().rstrip()
-        message = ": %s" % message if len(message) != 0 else "."
-        self.discord_thread.incoming_messages.append((channels, "**%s** left the IRC server%s" % (username, message)))
-        self.discord_thread.incoming_lock.release()
-
     def send(self, sender, message, target_channels):
         self.discord_thread.incoming_lock.acquire()
         self.discord_thread.incoming_messages.append((target_channels, message))
         self.discord_thread.incoming_lock.release()
 
     def on_receive_message(self, sender, sender_name, message, target_channels):
-        if sender_name not in self.configuration.bridge_generic_config.ignore_senders:
+        if self.configuration.bridge_generic_config.receive_messages and sender_name not in self.configuration.bridge_generic_config.ignore_senders:
             message = "**<%s: %s>** %s" % (sender.configuration.name, sender_name, message)
             self.send_buffered_message(sender=sender_name, target_channels=target_channels, message=message, buffer_size=1900, send_function=self.send)
 
     def on_receive_join(self, sender, joined_name, target_channels):
-        if joined_name not in self.configuration.bridge_generic_config.ignore_senders:
+        if self.configuration.bridge_generic_config.receive_join_leaves and joined_name not in self.configuration.bridge_generic_config.ignore_senders:
             self.discord_thread.incoming_lock.acquire()
             self.discord_thread.incoming_messages.append((target_channels, "**<%s: %s>** joined %s." % (sender.configuration.name, joined_name, ", ".join(target_channels))))
             self.discord_thread.incoming_lock.release()
 
     def on_receive_leave(self, sender, left_name, target_channels):
-        if left_name not in self.configuration.bridge_generic_config.ignore_senders:
+        if self.configuration.bridge_generic_config.receive_join_leaves and left_name not in self.configuration.bridge_generic_config.ignore_senders:
             self.discord_thread.incoming_lock.acquire()
             self.discord_thread.incoming_messages.append((target_channels, "**<%s: %s>** left %s." % (sender.configuration.name, left_name, ", ".join(target_channels))))
             self.discord_thread.incoming_lock.release()

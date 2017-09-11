@@ -183,11 +183,12 @@ class Bridge(BridgeBase):
                                 os.remove(temp_path)
                                 message_text = "(%s Failed to generate URL: %s): %s" % (image_type, str(e), "No Caption" if update.message.caption is None else update.message.caption)
 
-                    self.application.broadcast_event("on_receive_message",
-                    sender=self,
-                    sender_name=update.message.from_user.username,
-                    message=message_text,
-                    target_channels=[channel_name])
+                    if self.configuration.bridge_generic_config.broadcast_messages:
+                        self.application.broadcast_event("on_receive_message",
+                        sender=self,
+                        sender_name=update.message.from_user.username,
+                        message=message_text,
+                        target_channels=[channel_name])
         except telegram.error.TimedOut as e:
             pass
 
