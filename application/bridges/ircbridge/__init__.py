@@ -1,0 +1,1 @@
+from .ircbridge import Bridge

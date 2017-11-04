@@ -7,6 +7,8 @@
 """
 
 import os
+import time
+import logging
 import select
 import errno
 import socket
@@ -15,12 +17,11 @@ import datetime
 import threading
 import importlib
 
-class Connection(object):
-    addons = None
-    """ A list addon instances that have been initialized and are operating in this IRC instance. """
+from bridgesystem import BridgeBase, util
 
+class Connection(object):
     username = None
-    """ The """
+    """ The name this bot will publicly expose itself as. """
 
     nickname = None
 
@@ -37,13 +38,19 @@ class Connection(object):
     channel = None
 
     buffer = None
-    scheduler = None
-    commands = None
+    """
+        The current text buffer.
+    """
 
     socket = None
-    """ The internal socket that the client will use. """
+    """
+        The internal socket that the client will use.
+    """
 
     performed_identification = None
+    """
+        Whether or not the IRC bot has performed the identification step with the NickServ.
+    """
 
     event_handlers = None
 
@@ -52,7 +59,7 @@ class Connection(object):
         The current total time that recv's from the server have timed out.
     """
 
-    debug_prints_enabled = None
+    debug_prints_enabled = True
     """
         Whether or not debugging prints are enabled.
     """
@@ -64,8 +71,30 @@ class Connection(object):
         A dictionary mapping IRC channel names to lists of usernames.
     """
 
-    def __init__(self, global_configuration, configuration):
-        self.event_handlers =  {
+    ping_delay = None
+    """
+        How long to wait between pings.
+    """
+
+    timeout_delay = None
+    """
+        How long to wait without data from the server before we call it a timeout.
+    """
+
+    receive_length = None
+    """
+        How many bytes per recv call should be received.
+    """
+
+    logger = None
+
+    received_user_lists = False
+
+    def __init__(self, address, port, username, channels, password=None, ping_delay=None,
+    timeout_delay=datetime.timedelta(seconds=60), logger=None, receive_length=4096, event_handlers={}):
+
+        """
+         {
             "OnReceive": [],
             "OnJoin": [],
             "OnPart": [],
@@ -75,26 +104,36 @@ class Connection(object):
             "OnReceivePosePrivate": [],
             "OnQuit": [],
         }
+        """
 
         # Initialize event declarations
-        self.username = configuration["username"]
+        self.port = port
+        self.host = address
+        self.logger = logger if logger is not None else logging.basicConfig()
+        self.username = username
+        self.timeout_delay = timeout_delay
+        self.receive_length = receive_length
         self.nickname = "%s 1337 hax :Construct" % self.username
-        self.channels = configuration["channels"]
-        self.password = configuration["password"]
-        self.host = configuration["host"]
-        self.port = configuration["port"]
-        self.connection_info = (configuration["host"], configuration["port"])
-        self.configuration = configuration
-        self.global_configuration = global_configuration
+        self.channels = channels
+        self.password = password
+        self.ping_delay = ping_delay
+        self.connection_info = (address, port)
+        self.event_handlers = event_handlers
         self.last_ping_time = datetime.datetime.now()
         self.total_timeout_time = datetime.timedelta(seconds=0)
         self.debug_prints_enabled = False
+
+        self.channel_users = {channel: set() for channel in channels}
+
+        # Ensure all of the responders are lists
+        for event_name, responder in zip(self.event_handlers.keys(), self.event_handlers.values()):
+            if type(responder) is not list:
+                self.event_handlers[event_name] = [responder]
 
         self.reconnect()
 
         self.addons = []
         self.commands = {}
-        self.channel_users = {channel: set() for channel in self.channels}
         self.buffer = ""
 
         self.performed_identification = False
@@ -102,12 +141,10 @@ class Connection(object):
         self.send("NICK %s" % self.username)
         self.send("USER %s" % self.nickname)
 
-    def bind_event(self, name, handler):
-        self.event_handlers[name].append(handler)
-
     def dispatch_event(self, name, *args, **kwargs):
-        for handler in self.event_handlers[name]:
-            result = handler(*args, **kwargs)
+        if name in self.event_handlers:
+            for handler in self.event_handlers[name]:
+                result = handler(*args, **kwargs)
 
     def disconnect(self):
         """
@@ -116,6 +153,8 @@ class Connection(object):
         self.socket.close()
 
     def reconnect(self):
+        self.logger.debug("Establishing connection to IRC server.")
+
         self.buffer = ""
         if self.socket is not None:
             self.socket.close()
@@ -129,10 +168,12 @@ class Connection(object):
         self.socket.send(bytes("%s\r\n" % string, "utf8"))
 
     def say(self, string, channel):
-        self.socket.send(bytes('PRIVMSG #%s :%s\r\n' % (channel, string), "utf8"))
+        for string in util.chunk_string(string, 450):
+            self.socket.send(bytes('PRIVMSG #%s :%s\r\n' % (channel, string), "utf8"))
 
     def say_to(self, name, string):
-        self.socket.send(bytes('PRIVMSG %s :%s\r\n' % (name, string), "utf8"))
+        for string in util.chunk_string(string, 450):
+            self.socket.send(bytes('PRIVMSG %s :%s\r\n' % (name, string), "utf8"))
 
     def update(self, delta_time):
         """
@@ -141,7 +182,7 @@ class Connection(object):
             :param delta_time: The time since the last time this update function was called.
         """
         current_time = datetime.datetime.now()
-        if current_time - self.last_ping_time >= datetime.timedelta(seconds=self.global_configuration["pingseconds"]):
+        if self.ping_delay is not None and current_time - self.last_ping_time >= self.ping_delay:
             self.send("PING :DRAGON\r\n")
             self.last_ping_time = datetime.datetime.now()
 
@@ -151,7 +192,7 @@ class Connection(object):
         received_data = None
         try:
             while True:
-                received_data = self.socket.recv(self.global_configuration["chunksize"]).decode("utf8")
+                received_data = self.socket.recv(self.receive_length).decode("utf8")
                 self.buffer += received_data
                 self.total_timeout_time = datetime.timedelta(seconds=0)
                 received_data = None
@@ -161,11 +202,11 @@ class Connection(object):
             else:
                 self.total_timeout_time += delta_time
 
-                if self.total_timeout_time >= datetime.timedelta(seconds=self.global_configuration["timeoutseconds"]):
+                if self.total_timeout_time >= self.timeout_delay:
                     self.total_timeout_time = datetime.timedelta(seconds=0)
 
                     if self.debug_prints_enabled is True:
-                        print("Server connection has timed out -- attempting reconnection ...")
+                        self.logger.error("Server connection has timed out -- attempting reconnection ...")
                     self.reconnect()
         except socket.error as e:
             error = e.args[0]
@@ -173,8 +214,8 @@ class Connection(object):
                 return
 
             if self.debug_prints_enabled is True:
-                print("Disconnected from server -- attempting reconnection ...")
-                print("Reason: %s" % str(e))
+                self.logger.error("Disconnected from server -- attempting reconnection ...")
+                self.logger.error("Reason: %s" % str(e))
 
             self.reconnect()
         except BlockingIOError as e:
@@ -199,30 +240,27 @@ class Connection(object):
                         users = words[5:]
                         users[0] = users[0][1:]
 
-                        self.channel_users[channel_name] = set(users)
-                    elif words[1] == "004":
-                        for channel in self.channels:
-                            self.send("JOIN #%s" % channel)
+                        self.logger.debug("Received user list for channel %s: %s" % (channel_name, ", ".join(users)))
+                        for user in users:
+                            self.channel_users.setdefault(channel_name, set())
+                            self.channel_users[channel_name].add(user)
 
-                        for channel in self.channels:
-                            self.send("NAMES #%s" % channel)
+                            self.dispatch_event("OnUserListPopulate", username=user, channel=channel_name)
+                    elif words[1] == "004":
+                        self.logger.debug("Successfully established a connection to the IRC server. Joining channels and requesting userlists.")
+
+                        channels = ",".join(["#%s" % channel for channel in self.channels])
+                        self.send("JOIN %s" % channels)
+                        self.send("NAMES %s" % channels)
                     elif (words[1] == "PRIVMSG" and words[2].lstrip("#") in self.channels):
                         channel = words[2].lstrip("#")
                         sending_user = words[0].split("!")
                         sending_user = sending_user[0]
                         message_data = return_buffer[return_buffer.find(":") + 1:]
 
-                        """
-                        words = message_data.split()
-                        if (message_data[0] == "]"):
-                            command = words[0].lstrip("]").lower()
-                            if (command in self.commands):
-                                function_call = self.commands[command]["call"]
-                                function_call(sending_user, message_data[len(command) + 1:])
-                        """
-
+                        # FIXME: Properly parse these out
                         if words[3] == ":\x01ACTION":
-                            message_data = " ".join(words[4:])
+                            message_data = " ".join(words[4:]).rstrip("\x01")
                             self.dispatch_event("OnReceivePose", username=sending_user, message=message_data, channel=channel)
                         else:
                             message_data = " ".join(words[3:])[1:]
@@ -238,16 +276,24 @@ class Connection(object):
                         else:
                             message_data = " ".join(words[3:])[1:]
                             self.dispatch_event("OnReceivePrivate", username=sending_user, message=message_data)
-
-                    # Handles for nick
+                    # Handle for bot ident
                     elif words[1] == "NOTICE" and "nickserv" in words[0].lower() and not self.performed_identification and "registered" in return_buffer and self.password is not None:
-                        self.say_to("NickServ", "IDENTIFY %s" % self.password)
-                        self.performed_identification = True
-                        self.password = None
+                        self.logger.debug("IRC server has requested authentication. Attempting to authenticate.")
+
+                        if self.password is not None:
+                            self.say_to("NickServ", "IDENTIFY %s" % self.password)
+                            self.performed_identification = True
+                            self.password = None
+                        else:
+                            self.logger.error("IRC server requested authentication but there is currently no password set.")
+
+                    # Handle for name changes
                     elif words[1] == "NICK":
                         hostmask = words[0]
                         old_username = hostmask.split("!", 1)[0]
                         new_username = words[2][1:]
+
+                        self.logger.debug("'%s' changed their name to '%s'." % (old_username, new_username))
 
                         channels = set()
                         for channel_name, channel_users in zip(self.channel_users.keys(), self.channel_users.values()):
@@ -268,6 +314,7 @@ class Connection(object):
                                 left_channels.append(channel_name)
                                 channel_users.remove(username)
 
+                        self.logger.debug("%s left the server." % username)
                         self.dispatch_event("OnQuit", username=username, message=message, hostmask=hostmask, channels=left_channels)
                     elif words[1] == "JOIN":
                         channel = words[2].lstrip("#")
@@ -275,6 +322,7 @@ class Connection(object):
                             hostmask = words[0]
                             username = hostmask.split("!", 1)[0]
 
+                            self.logger.debug("%s joined channel %s." % (username, channel))
                             if username == self.username:
                                 return
 
@@ -287,6 +335,7 @@ class Connection(object):
                             username = hostmask.split("!", 1)[0]
                             message = " ".join(words[3:])[1:]
 
+                            self.logger.debug("%s left channel %s." % (username, channel))
                             if username == self.username:
                                 return
 
