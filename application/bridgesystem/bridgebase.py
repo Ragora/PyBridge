@@ -9,7 +9,8 @@ import datetime
 import inspect
 import shutil
 
-from bridgesystem import util
+from . import util
+from .eventhandler import EventHandler
 
 class AddonError(Exception):
     pass
@@ -20,12 +21,8 @@ class AddonMismatchedEventArgsError(AddonError):
 class AddonConfigurationError(AddonError):
     pass
 
-class BridgeBase(object):
-    event_map = None
-    """
-        A dictionary mapping events to each other.
-    """
 
+class BridgeBase(object):
     application = None
     """
         The main application instance we are associated with.
@@ -47,6 +44,9 @@ class BridgeBase(object):
     """
 
     global_configuration = None
+    """
+        The global bot configuration block.
+    """
 
     threads = None
     """
@@ -54,8 +54,16 @@ class BridgeBase(object):
     """
 
     logger = None
+    """
+        The logger associated with this bridge.
+    """
 
-    def __init__(self, application, logger, home_path, configuration, global_configuration):
+    event_handler = None
+    """
+        The event handler used by the domain this bridge is in.
+    """
+
+    def __init__(self, application, logger, home_path, configuration, global_configuration, event_handler):
         """
             Base initialize function to create empty lambdas for the base event types. Events of other types may be specified,
             but these at the least should be defined for interoperability.
@@ -65,55 +73,13 @@ class BridgeBase(object):
         self.threads = []
         self.logger = logger
         self.home_path = home_path
-        self.event_map = {}
         self.application = application
         self.configuration = configuration
+        self.event_handler = event_handler
         self.global_configuration = global_configuration
 
         self.long_block_buffers = {}
         self.last_long_block_process = {}
-
-        self.register_event("on_receive_leave", lambda sender, left_name, target_channels: True)
-        self.register_event("on_receive_join", lambda sender, joined_name, target_channels: True)
-        self.register_event("on_receive_pose", lambda sender, sender_name, message, target_channels: True)
-        self.register_event("on_receive_message", lambda sender, sender_name, message, target_channels: True)
-
-    def receive_event(self, name, *args, **kwargs):
-        """
-            Raises an event within this addon.
-
-            :param name: The name of the event to raise. If there is no event going by this name, nothing happens.
-            :param *args: All positional args to pass to the events.
-            :param kwargs: All key word args to pass to the events.
-        """
-        # Quietly do nothing because there isn't any responder for this.
-        if name not in self.event_map:
-            return
-
-        for responder in self.event_map[name]:
-            try:
-                responder(*args, **kwargs)
-            except Exception as e:
-                pass
-                # FIXME: Process and log the error in some way.
-
-    def register_event(self, name, responder):
-        """
-            Registers an event to be processed by this addon.
-        """
-        self.event_map.setdefault(name, [])
-
-        # Verify that all functions have the same signature if we have any events defined already
-        if len(self.event_map[name]) != 0:
-            first_responder = self.event_map[name][0]
-
-            responder_argument_count = responder.__code__.co_argcount
-            if inspect.ismethod(responder):
-                responder_argument_count -= 1
-
-            if first_responder.__code__.co_argcount != responder_argument_count:
-                raise AddonMismatchedEventArgsError("Attempted to register a responder to event '%s' using a function accepting %u parameters! Expected %u." % (name, responder.__code__.co_argcount, first_responder.__code__.co_argcount))
-        self.event_map[name].append(responder)
 
     def send_buffered_message(self, sender, target_channels, message, buffer_size, send_function):
         message_blocks = util.chunk_string(message, buffer_size)
@@ -142,7 +108,7 @@ class BridgeBase(object):
                 continue
 
             # Process the next message
-            if now - last_sent >= self.configuration.bridge_generic_config.long_block_delay_seconds:
+            if now - last_sent >= self.configuration.bridge_generic_config.large_block_delay_seconds:
                 target_channels, block_data, send_function = self.long_block_buffers[sender_name][0]
 
                 # Read the first message

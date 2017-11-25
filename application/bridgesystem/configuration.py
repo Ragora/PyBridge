@@ -79,8 +79,7 @@ class ConfigurationBase(object):
                     resolved_value = value_constructor(resolved_value)
 
                 # If the type check is specified and our key exists in config, verify it.
-                if value_type is not None and type(resolved_value) is not value_type:
-                    print(resolved_value)
+                if value_type is not None and type(resolved_value) is not value_type and type(resolved_value) is not type(config_meta.default):
                     raise TypeError("Validation failed for configuration '%s'. Expected a %s." % (config_name, value_type))
 
                 # If the validator exists, ensure our value is sane.
@@ -139,12 +138,19 @@ class Domain(ConfigurationBase):
             receive_name_changes = ConfigurationBase.ConfigurationValue(name="receiveNameChanges", default=None, value_constructor=bool)
             receive_messages = ConfigurationBase.ConfigurationValue(name="receiveMessages", default=None, value_constructor=bool)
             receive_join_leaves = ConfigurationBase.ConfigurationValue(name="receiveJoinLeaves", default=None, value_constructor=bool)
-            broadcasting_channels = ConfigurationBase.ConfigurationValue(name="broadCastingChannels", default=None, value_constructor=list)
-            receiving_channels = ConfigurationBase.ConfigurationValue(name="receivingChannels", default=None, value_constructor=list)
+            broadcasting_channels = ConfigurationBase.ConfigurationValue(name="broadCastingChannels", default=None, value_constructor=lambda input: [channel.lower() for channel in input] if input is not None else None)
+            receiving_channels = ConfigurationBase.ConfigurationValue(name="receivingChannels", default=None, value_constructor=lambda input: [channel.lower() for channel in input] if input is not None else None)
             large_block_delay_seconds = ConfigurationBase.ConfigurationValue(name="largeBlockDelaySeconds", default=None, value_constructor=float)
 
             def __init__(self, configuration={}):
                 super(Domain.Bridge.BridgeGenericConfig, self).__init__(configuration)
+
+        class PluginGenericConfig(ConfigurationBase):
+            """
+                A class representing the bridge generic config sections on a per bridge basis.
+            """
+            def __init__(self, configuration={}):
+                super(Domain.Bridge.PluginGenericConfig, self).__init__(configuration)
 
         def __init__(self, configuration={}):
             self.name = ConfigurationBase.ConfigurationValue(name="name", value_constructor=str)
@@ -153,8 +159,21 @@ class Domain(ConfigurationBase):
             self.bridge_internal_config = ConfigurationBase.ConfigurationValue(name="bridgeInternalConfig", value_constructor=dict)
             super(Domain.Bridge, self).__init__(configuration)
 
+    class Plugin(ConfigurationBase):
+        plugin = None
+
+        plugin_generic_config = None
+        plugin_internal_config = None
+
+        def __init__(self, configuration={}):
+            self.plugin = ConfigurationBase.ConfigurationValue(name="plugin", value_constructor=str)
+            self.plugin_generic_config = ConfigurationBase.ConfigurationValue(name="pluginGenericConfig", value_constructor=Domain.Bridge.PluginGenericConfig)
+            self.plugin_internal_config = ConfigurationBase.ConfigurationValue(name="pluginInternalConfig", value_constructor=dict)
+            super(Domain.Plugin, self).__init__(configuration)
+
     def __init__(self, configuration={}):
         self.name = ConfigurationBase.ConfigurationValue(name="name", value_constructor=str)
+        self.plugins = ConfigurationBase.ConfigurationValue(name="plugins", value_constructor=lambda elements: [Domain.Plugin(element) for element in elements])
         self.bridges = ConfigurationBase.ConfigurationValue(name="bridges", value_constructor=lambda elements: [Domain.Bridge(element) for element in elements])
         super(Domain, self).__init__(configuration)
 
@@ -209,7 +228,7 @@ class GlobalConfiguration(ConfigurationBase):
             self.force_stop = ConfigurationBase.ConfigurationValue(name="forceStop", default=True, value_type=bool)
             self.sleep_ms = ConfigurationBase.ConfigurationValue(name="sleepMS", default=32, value_type=int)
             self.auto_restart = ConfigurationBase.ConfigurationValue(name="autoRestart", default=False, value_type=bool)
-
+            self.logfile = ConfigurationBase.ConfigurationValue(name="logfile", default=None, value_type=str)
             super(GlobalConfiguration.ProcessInternal, self).__init__(configuration)
 
         debug = None
@@ -233,6 +252,11 @@ class GlobalConfiguration(ConfigurationBase):
             gracefully exit.
         """
 
+        logfile = None
+        """
+            A path to the log file to write output to.
+        """
+
     class ImageHosting(ConfigurationBase):
         def __init__(self, configuration={}):
             self.enabled = ConfigurationBase.ConfigurationValue(name="enabled", default=False, value_type=bool)
@@ -250,8 +274,8 @@ class GlobalConfiguration(ConfigurationBase):
         ignore_senders = ConfigurationBase.ConfigurationValue(name="ignoreSenders", default=[], value_constructor=list)
         broadcast_messages = ConfigurationBase.ConfigurationValue(name="broadcastMessages", default=True, value_constructor=bool)
         broadcast_join_leaves = ConfigurationBase.ConfigurationValue(name="broadcastJoinLeaves", default=True, value_constructor=bool)
-        broadcasting_channels = ConfigurationBase.ConfigurationValue(name="broadCastingChannels", default=[], value_constructor=list)
-        receiving_channels = ConfigurationBase.ConfigurationValue(name="receivingChannels", default=[], value_constructor=list)
+        broadcasting_channels = ConfigurationBase.ConfigurationValue(name="broadCastingChannels", default=[], value_constructor=lambda input: [channel.lower() for channel in input] if input is not None else None)
+        receiving_channels = ConfigurationBase.ConfigurationValue(name="receivingChannels", default=[], value_constructor=lambda input: [channel.lower() for channel in input] if input is not None else None)
         large_block_delay_seconds = ConfigurationBase.ConfigurationValue(name="largeBlockDelaySeconds", default=datetime.timedelta(seconds=2), value_constructor=lambda input: datetime.timedelta(seconds=input))
         broadcast_name_changes = ConfigurationBase.ConfigurationValue(name="broadcastNameChanges", default=True, value_constructor=bool)
         receive_name_changes = ConfigurationBase.ConfigurationValue(name="receiveNameChanges", default=True, value_constructor=bool)

@@ -1,7 +1,5 @@
 """
-    discordbridge.py
-
-    Code to provide discord IRC bridging.
+    Python programming to provide Discord service bridging.
 """
 
 import os
@@ -21,9 +19,18 @@ from urllib.request import urlretrieve
 import discord
 
 from PIL import Image
+
+from .user import User
+from .channel import Channel
+from .message import Message
 from bridgesystem import BridgeBase, util
 
+
 class Bridge(BridgeBase):
+    """
+        A class representing the Discord bridge.
+    """
+
     configuration = None
     """
         The configuration associated with this addon.
@@ -32,6 +39,16 @@ class Bridge(BridgeBase):
     discord_thread = None
     """
         The discord thread running the discord connection.
+    """
+
+    user_instances = None
+    """
+        A dictionary mapping user identifiers to their UserBase instance.
+    """
+
+    channel_instances = None
+    """
+        A dictionary mapping channel identifiers to their ChannelBase instance.
     """
 
     class DiscordThread(threading.Thread):
@@ -83,6 +100,9 @@ class Bridge(BridgeBase):
         logger = None
 
         def __init__(self, logger, configuration):
+            """
+                Initializes a new DiscordThread instance.
+            """
             super(Bridge.DiscordThread, self).__init__()
 
             self.logger = logger
@@ -94,6 +114,7 @@ class Bridge(BridgeBase):
             self.incoming_messages = []
 
             self.should_run = True
+            self.daemon = True
 
         def run(self):
             """
@@ -127,6 +148,9 @@ class Bridge(BridgeBase):
 
         @asyncio.coroutine
         def process_input_messages(self):
+            """
+                A couroutine used for processing input messages to be sent to Discord.
+            """
             yield from self.discord_connection.wait_until_ready()
 
             while self.discord_connection.is_closed is False:
@@ -137,7 +161,7 @@ class Bridge(BridgeBase):
                 discord_channels = {channel.name: channel for channel in discord_channels}
 
                 for recipient_channels, message in self.incoming_messages:
-                    if type(recipient_channels) is not list:
+                    if hasattr(recipient_channels, "__iter__") is False:
                         recipient_channels = [recipient_channels]
 
                     for recipient_channel in recipient_channels:
@@ -175,9 +199,17 @@ class Bridge(BridgeBase):
             queued_calls = [self.discord_connection.logout(), self.discord_connection.close()]
             discord.compat.create_task(asyncio.wait(queued_calls))
 
-    def __init__(self, application, logger, home_path, configuration, global_configuration):
-        super(Bridge, self).__init__(application, logger, home_path, configuration, global_configuration)
+    def __init__(self, application, logger, home_path, configuration, global_configuration, event_handler):
+        """
+            Initializes a new Bridge instance.
 
+            :param application: The main application object.
+            :param logger: The logger object for this bridge.
+            :param home_path: The home path.
+            :param configuration: The configuration data for this bridge.
+            :param global_configuration: The global configuration data for the bot.
+        """
+        super(Bridge, self).__init__(application, logger, home_path, configuration, global_configuration, event_handler=event_handler)
         self.discord_user_color_maps = {}
 
     def stop(self):
@@ -192,10 +224,13 @@ class Bridge(BridgeBase):
             all connections have been created.
         """
 
-        self.register_event("on_receive_message", self.on_receive_message)
-        self.register_event("on_receive_pose", self.on_receive_pose)
-        self.register_event("on_receive_join", self.on_receive_join)
-        self.register_event("on_receive_leave", self.on_receive_leave)
+        self.user_instances = {}
+        self.channel_instances = {}
+
+        self.event_handler.register_event(self.event_handler.Events.OnReceivePose, self.on_receive_pose)
+        self.event_handler.register_event(self.event_handler.Events.OnReceiveJoin, self.on_receive_join)
+        self.event_handler.register_event(self.event_handler.Events.OnReceiveLeave, self.on_receive_leave)
+        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessage, self.on_receive_message)
 
         self.initialize_discord_connection()
 
@@ -216,6 +251,38 @@ class Bridge(BridgeBase):
 
             :param connection: The IRC connection we are being associated with.
         """
+
+    def register_user(self, user):
+        """
+            Registers user objects with the discord bridge.
+
+            :param user: The Discord user object.
+
+            :rtype: UserBase
+            :return: A UserBase object wrapping the Discord user.
+        """
+        if user.id in self.user_instances.keys():
+            return self.user_instances[user.id]
+
+        user_instance = User(connection=self.discord_thread.discord_connection, user_instance=user, event_loop=self.discord_thread.loop)
+        self.user_instances[user.id] = user_instance
+        return user_instance
+
+    def register_channel(self, channel):
+        """
+            Registers channel objects with the discord bridge.
+
+            :param channel: The Discord channel object.
+
+            :rtype: ChannelBase
+            :return: A ChannelBase object wrapping the Discord channel.
+        """
+        if channel.id in self.channel_instances.keys():
+            return self.channel_instances[channel.id]
+
+        channel_instance = Channel(connection=self.discord_thread.discord_connection, event_loop=self.discord_thread.loop, channel_instance=channel)
+        self.channel_instances[channel.id] = channel_instance
+        return channel_instance
 
     def update(self, delta_time):
         """
@@ -278,41 +345,87 @@ class Bridge(BridgeBase):
                     message_content = "(Discord Attachment: %s): %s" % (message_content, "\n".join([attachment["url"] for attachment in message.attachments]))
 
             if self.configuration.bridge_generic_config.broadcast_messages and author not in self.configuration.bridge_generic_config.ignore_senders:
-                self.application.broadcast_event("on_receive_message",
-                sender=self,
-                sender_name=author,
-                message=message_content,
-                target_channels=[message.channel.name])
+                channel = None
+                user = self.register_user(user=message.author)
+
+                if message.channel.type != discord.enums.ChannelType.private:
+                    channel = self.register_channel(channel=message.channel)
+                message = Message(message_instance=message, sender=user, channels=channel, event_loop=self.discord_thread.loop, connection=self.discord_thread.discord_connection)
+
+                if channel is not None:
+                    self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
+                else:
+                    self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessagePrivate, emitter=self, message=message)
 
         self.discord_thread.outgoing_messages = []
         self.discord_thread.outgoing_lock.release()
 
-    def get_commands(self):
-        return {}
-
     def send(self, sender, message, target_channels):
+        if sender is self:
+            return
+
         self.discord_thread.incoming_lock.acquire()
         self.discord_thread.incoming_messages.append((target_channels, message))
         self.discord_thread.incoming_lock.release()
 
-    def on_receive_pose(self, sender, sender_name, message, target_channels):
-        if self.configuration.bridge_generic_config.receive_messages and sender_name not in self.configuration.bridge_generic_config.ignore_senders:
-            message = "**<%s: %s>** _%s_" % (sender.configuration.name, sender_name, message)
-            self.send_buffered_message(sender=sender_name, target_channels=target_channels, message=message, buffer_size=1900, send_function=self.send)
+    def on_receive_pose(self, emitter, message):
+        """
+            Callback that is raised when the bridge receives a pose in a channel.
 
-    def on_receive_message(self, sender, sender_name, message, target_channels):
-        if self.configuration.bridge_generic_config.receive_messages and sender_name not in self.configuration.bridge_generic_config.ignore_senders:
-            message = "**<%s: %s>** %s" % (sender.configuration.name, sender_name, message)
-            self.send_buffered_message(sender=sender_name, target_channels=target_channels, message=message, buffer_size=1900, send_function=self.send)
+            :param emitter: The emitting bridge instance.
+            :param message: The MessageBase instance representing the message received.
+        """
+        if emitter is self:
+            return
 
-    def on_receive_join(self, sender, joined_name, target_channels):
-        if self.configuration.bridge_generic_config.receive_join_leaves and joined_name not in self.configuration.bridge_generic_config.ignore_senders:
+        if self.configuration.bridge_generic_config.receive_messages and message.sender.username not in self.configuration.bridge_generic_config.ignore_senders:
+            message_text = "**<%s: %s>** _%s_" % (emitter.configuration.name, message.sender.username, message.raw_text)
+            target_channels = [channel.name for channel in message.channels]
+            self.send_buffered_message(sender=message.sender.username, target_channels=target_channels, message=message_text, buffer_size=1900, send_function=self.send)
+
+    def on_receive_message(self, emitter, message):
+        """
+            A callback handler for when the bot receives a regular text message in a channel.
+
+            :param emitter: The sending bridge.
+            :param sender_name: The name of the sending client.
+            :param message: The message that was sent.
+            :param target_channels: The names of all channels this message was sent to.
+        """
+        if emitter is self:
+            return
+
+        if self.configuration.bridge_generic_config.receive_messages and message.sender.username not in self.configuration.bridge_generic_config.ignore_senders:
+            message_text = "**<%s: %s>** %s" % (emitter.configuration.name, message.sender.username, message.raw_text)
+            target_channels = [channel.name for channel in message.channels]
+            self.send_buffered_message(sender=message.sender.username, target_channels=target_channels, message=message_text, buffer_size=1900, send_function=self.send)
+
+    def on_receive_join(self, emitter, user, channels):
+        """
+            A callback handler for when the bot receives a join event.
+
+            :param emitter: The sending bridge.
+            :param user: The joining UserBase instance.
+            :param channels: A list of ChannelBase instances representing the channels that the user joined.
+        """
+        if emitter is self:
+            return
+
+        if self.configuration.bridge_generic_config.receive_join_leaves and user.username not in self.configuration.bridge_generic_config.ignore_senders:
             self.discord_thread.incoming_lock.acquire()
-            self.discord_thread.incoming_messages.append((target_channels, "**<%s: %s>** joined %s." % (sender.configuration.name, joined_name, ", ".join(target_channels))))
+            target_channels = [channel.name for channel in channels]
+            self.discord_thread.incoming_messages.append((target_channels, "**<%s: %s>** joined %s." % (emitter.configuration.name, user.username, ", ".join(target_channels))))
             self.discord_thread.incoming_lock.release()
 
-    def on_receive_leave(self, sender, left_name, target_channels):
-        if self.configuration.bridge_generic_config.receive_join_leaves and left_name not in self.configuration.bridge_generic_config.ignore_senders:
+    def on_receive_leave(self, emitter, user, channels):
+        """
+            A callback handler for when the bot receives a leave event.
+        """
+        if emitter is self:
+            return
+
+        if self.configuration.bridge_generic_config.receive_join_leaves and user.username not in self.configuration.bridge_generic_config.ignore_senders:
             self.discord_thread.incoming_lock.acquire()
-            self.discord_thread.incoming_messages.append((target_channels, "**<%s: %s>** left %s." % (sender.configuration.name, left_name, ", ".join(target_channels))))
+            target_channels = [channel.name for channel in channels]
+            self.discord_thread.incoming_messages.append((target_channels, "**<%s: %s>** left %s." % (emitter.configuration.name, user.username, ", ".join(target_channels))))
             self.discord_thread.incoming_lock.release()
