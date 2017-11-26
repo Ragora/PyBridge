@@ -73,10 +73,10 @@ class Bridge(BridgeBase):
             all connections have been created.
         """
 
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessage, self.on_receive_message)
-        self.event_handler.register_event(self.event_handler.Events.OnReceivePose, self.on_receive_pose)
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveLeave, self.on_receive_leave)
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveJoin, self.on_receive_join)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveMessage, self.on_receive_message)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceivePose, self.on_receive_pose)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveLeave, self.on_receive_leave)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveJoin, self.on_receive_join)
         self.connection = telegram.Bot(token=self.configuration.bridge_internal_config["token"])
 
         self.unmapped_chats = []
@@ -276,7 +276,7 @@ class Bridge(BridgeBase):
                     else:
                         sender = self.register_user(update.message.from_user)
                         message = Message(connection=self.connection, sender=sender, message_instance=update.message, channels=None)
-                        self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessagePrivate, emitter=self, message=message)
+                        self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveMessagePrivate, emitter=self, message=message)
 
                 if channel_name is None or channel_name not in self.configuration.bridge_generic_config.broadcasting_channels:
                     continue
@@ -363,6 +363,6 @@ class Bridge(BridgeBase):
                     if self.configuration.bridge_generic_config.broadcast_messages:
                         sender = self.register_user(update.message.from_user)
                         message = Message(connection=self.connection, sender=sender, message_instance=update.message, channels=self.channel_instances[chat_identifier])
-                        self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
+                        self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
         except telegram.error.TimedOut as e:
             pass

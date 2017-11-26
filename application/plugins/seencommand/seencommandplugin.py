@@ -1,5 +1,5 @@
 """
-    A plugin implementing a chat command framework.
+    A plugin implementing a seen command for tracking users.
 """
 
 import datetime
@@ -17,21 +17,20 @@ class SeenCommandPlugin(PluginBase):
         A dictionary mapping user objects to the last datetime they were seen at.
     """
 
-    def __init__(self, application, logger, home_path, configuration, global_configuration, event_handler):
-        """
-            Initializes a new Plugin. Here you should perform basic initialization of your plugin.
-        """
-        super(SeenCommandPlugin, self).__init__(application=application, event_handler=event_handler, logger=logger,
-                                                 home_path=home_path, configuration=configuration, global_configuration=global_configuration)
-
-
     def start(self):
         """
             Called when the plugin should actually startup and begin operation.
         """
         self.seen_database = {}
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessage, self.on_receive_message)
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessagePrivate, self.on_receive_private_message)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveMessage, self.on_receive_message)
+
+        for plugin in self.domain.plugins:
+            if plugin.__class__.__name__ == "ChatCommandsPlugin":
+                plugin.register_private_command_handler("seen", self.handle_seen_command, description="Determines when someone was last seen.")
+                plugin.register_command_handler("seen", self.handle_seen_command, description="Determines when someone was last seen.")
+                break
+        else:
+            raise BaseException("!!! Could not locate ChatCommandsPlugin for this Domain!")
 
     def stop(self):
         """
@@ -47,6 +46,29 @@ class SeenCommandPlugin(PluginBase):
                 since the last update.
         """
 
+    def handle_seen_command(self, message, components):
+        """
+            Command handler for the seen invocation.
+
+            :param message: The message object that was received.
+            :param components: The command components split up by spaces.
+        """
+        search_name = " ".join(components).lstrip().rstrip()
+
+        if search_name == "":
+            message.sender.send_reply(message="A username is required.", channels=message.channels)
+            return
+
+        possible_matches = [message_data for user, message_data in zip(self.seen_database.keys(), self.seen_database.values()) if user.username.lower() == search_name.lower() or search_name.lower() in user.username.lower()]
+        if len(possible_matches) == 0:
+            message.sender.send_reply(message="No user by that name is on record.", channels=message.channels)
+        else:
+            result = "Matches for '%s'\n" % search_name
+            for message_data in possible_matches:
+                channels = ", ".join([channel.name for channel in message_data.channels])
+                result += "    %s in channels %s at %s: %s\n" % (message_data.sender.username, channels, message_data.date.ctime(), message_data.raw_text)
+            message.sender.send_reply(message=result, channels=message.channels)
+
     def on_receive_message(self, emitter, message):
         """
             A callback handler for when the bot receives a regular text message in a channel.
@@ -54,13 +76,4 @@ class SeenCommandPlugin(PluginBase):
             :param bridge: The sending bridge.
             :param message: The message that was sent.
         """
-        self.seen_database[message.sender] = datetime.datetime.now()
-
-    def on_receive_private_message(self, emitter, message):
-        """
-            A callback handler for when the bot receives a private text message.
-
-            :param bridge: The sending bridge.
-            :param message: The message that was sent.
-        """
-        self.seen_database[message.sender] = datetime.datetime.now()
+        self.seen_database[message.sender] = message

@@ -81,7 +81,7 @@ class Bridge(BridgeBase):
                 except ValueError as e:
                     self.logger.error("Failed to load userColors.json:\n %s" % traceback.format_exc())
 
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessage, self.on_receive_message)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveMessage, self.on_receive_message)
 
         event_handlers = {
             "OnJoin": self.handle_irc_join,
@@ -168,7 +168,7 @@ class Bridge(BridgeBase):
         if self.configuration.bridge_generic_config.broadcast_join_leaves:
             user = self.register_user(username)
             channel = self.register_channel(channel=channel)
-            self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveJoin, emitter=self, user=user, channels=[channel])
+            self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveJoin, emitter=self, user=user, channels=[channel])
 
     def handle_irc_part(self, username, channel, hostmask, message):
         """
@@ -182,7 +182,7 @@ class Bridge(BridgeBase):
         if self.configuration.bridge_generic_config.broadcast_join_leaves:
             user = self.register_user(username)
             channel = self.register_channel(channel=channel)
-            self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveLeave, user=user, emitter=self, channels=[channel])
+            self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveLeave, user=user, emitter=self, channels=[channel])
 
     def handle_irc_quit(self, username, message, hostmask, channels):
         """
@@ -196,7 +196,7 @@ class Bridge(BridgeBase):
         if self.configuration.bridge_generic_config.broadcast_join_leaves:
             user = self.register_user(username)
             channels = [self.register_channel(channel=channel.lower()) for channel in channels]
-            self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveLeave, emitter=self, user=user, target_channels=channels)
+            self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveLeave, emitter=self, user=user, channels=channels)
 
     def handle_irc_pose(self, username, message, channel):
         """
@@ -210,7 +210,7 @@ class Bridge(BridgeBase):
             user = self.register_user(username)
             channel = self.register_channel(channel=channel)
             message = Message(sender=user, raw_text=message, channels=channel, connection=self.connection)
-            self.event_handler.broadcast_event(self.event_handler.Events.OnReceivePose, emitter=self, message=message)
+            self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceivePose, emitter=self, message=message)
 
     def handle_private_irc_message(self, username, message):
         """
@@ -223,7 +223,7 @@ class Bridge(BridgeBase):
         if self.configuration.bridge_generic_config.broadcast_messages:
             user = self.register_user(username)
             message = Message(sender=user, raw_text=message, channels=None, connection=self.connection)
-            self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessagePrivate, emitter=self, message=message)
+            self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveMessagePrivate, emitter=self, message=message)
 
     def handle_irc_message(self, username, message, channel):
         """
@@ -237,7 +237,7 @@ class Bridge(BridgeBase):
             user = self.register_user(username)
             channel = self.register_channel(channel=channel)
             message = Message(sender=user, raw_text=message, channels=channel, connection=self.connection)
-            self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
+            self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
 
     def send(self, sender, message, target_channels):
         if sender is self:

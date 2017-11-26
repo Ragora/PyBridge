@@ -2,6 +2,7 @@
     Python programming for the MessageBase class.
 """
 
+import datetime
 
 class MessageBase(object):
     """
@@ -58,7 +59,8 @@ class MessageBase(object):
         self.pinned = pinned
         self.raw_text = raw_text
         self.clean_text = clean_text
-        self.channels = channels if hasattr(channels, "__iter__") else [channels]
+        self.date = datetime.datetime.now()
+        self.channels = channels if hasattr(channels, "__iter__") or channels is None else [channels]
 
     def pin(self, pinned=True):
         """

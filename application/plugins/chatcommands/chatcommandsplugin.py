@@ -26,6 +26,10 @@ class ChatCommandsPlugin(PluginBase):
     """
 
     class CommandEntry(object):
+        """
+            A class representing a command registered to the chat command plugin.
+        """
+
         privilege = None
         """
              The minimum administrative privilege level required to execute this command. All clients default to
@@ -64,11 +68,11 @@ class ChatCommandsPlugin(PluginBase):
             self.privilege = privilege
             self.description = description
 
-    def __init__(self, application, logger, home_path, configuration, global_configuration, event_handler):
+    def __init__(self, application, logger, home_path, configuration, global_configuration, domain):
         """
             Initializes a new Plugin. Here you should perform basic initialization of your plugin.
         """
-        super(ChatCommandsPlugin, self).__init__(application=application, event_handler=event_handler, logger=logger,
+        super(ChatCommandsPlugin, self).__init__(application=application, domain=domain, logger=logger,
                                                  home_path=home_path, configuration=configuration, global_configuration=global_configuration)
 
         self.command_mapping = {}
@@ -90,8 +94,8 @@ class ChatCommandsPlugin(PluginBase):
         """
             Called when the plugin should actually startup and begin operation.
         """
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessage, self.on_receive_message)
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessagePrivate, self.on_receive_private_message)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveMessage, self.on_receive_message)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveMessagePrivate, self.on_receive_private_message)
 
         self.register_private_command_handler("help", self.handle_help_command, description="Displays this help text.")
         self.register_command_handler("help", lambda message, components: [channel.send_message("@%s Please private message me to see help." % message.sender.username) for channel in message.channels],
@@ -112,8 +116,15 @@ class ChatCommandsPlugin(PluginBase):
         """
 
     def handle_help_command(self, message, components):
+        """
+            Implementation for the help command.
+
+            :param message: The message that triggered this command.
+            :param components: A list of parameters to the command.
+        """
         # Output channel commands first
         result = ""
+
         if len(self.command_mapping) != 0:
             result = "Available Channel Commands\n"
 
@@ -130,7 +141,7 @@ class ChatCommandsPlugin(PluginBase):
                     if meta.description is not None:
                         command_entry += " - %s" % meta.description
                     result += "        %s\n" % command_entry
-        message.sender.send_message(result)
+        message.sender.send_reply(message=result)
 
     def register_command_handler(self, command, handler, privilege=0, description=None, category=None):
         """

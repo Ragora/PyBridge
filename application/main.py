@@ -30,13 +30,6 @@ class Application(object):
         The main application class.
     """
 
-    loaded_bridges = None
-
-    loaded_plugins = None
-    """
-        A list of PluginBase instances representing loaded plugins.
-    """
-
     should_run = None
     """
         Whether or not the bridging application should continue to run.
@@ -46,17 +39,7 @@ class Application(object):
 
     domains = None
     """
-        A dictionary mapping domain names to a list of bridges that all are interconnected.
-    """
-
-    bridge_domains = None
-    """
-        A dictionary mapping bridge instances to the domain objects that they are in.
-    """
-
-    domain_event_handlers = None
-    """
-        A dictionary mapping domain names to their event handlers.
+        A dictionary mapping domain names their Domain instances.
     """
 
     def __init__(self):
@@ -65,9 +48,6 @@ class Application(object):
         """
         self.should_run = True
         self.domains = {}
-        self.loaded_bridges = []
-        self.bridge_domains = {}
-        self.domain_event_handlers = {}
 
     def setup_and_run(self, configuration_data):
         """
@@ -83,16 +63,17 @@ class Application(object):
         if home_exists is False:
             os.mkdir(home_path)
 
-        # Load the bridges and plugins
-        self.loaded_bridges = []
-        self.loaded_plugins = []
-
         # Process each bridge and load the appropriate bridge code and assemble the broadcast domains.
         for domain in configuration_data.domains:
             event_handler = bridgesystem.EventHandler()
-            self.domain_event_handlers[domain.name] = event_handler
 
-            # load bridges first
+            # Initialize the domain
+            loaded_bridges = []
+            loaded_plugins = []
+            domain_instance = bridgesystem.Domain(name=domain.name, plugins=loaded_plugins, bridges=loaded_bridges, event_handler=event_handler)
+            self.domains[domain.name] = domain_instance
+
+            # Load all bridges for this domain
             for bridge in domain.bridges:
                 bridge_name = bridge.bridge
 
@@ -115,18 +96,14 @@ class Application(object):
                     if configuration_data.global_configuration.process_internal.debug:
                         logger.setLevel(logging.DEBUG)
 
-                    bridge_instance = module.Bridge(self, logger, home_path, bridge, configuration_data, event_handler=event_handler)
-                    self.loaded_bridges.append(bridge_instance)
-
-                    self.domains.setdefault(domain, [])
-                    self.domains[domain].append(bridge_instance)
-                    self.bridge_domains[bridge_instance] = domain
+                    bridge_instance = module.Bridge(self, logger, home_path, bridge, configuration_data, domain=domain_instance)
+                    loaded_bridges.append(bridge_instance)
                 except ImportError as e:
                     self.logger.error("!!! Failed to initialize bridge '%s': " % bridge_name)
                     self.logger.error(traceback.format_exc())
                     return False
 
-            # Load plugins
+            # Load plugins for this domain
             for plugin in domain.plugins:
                 plugin_name = plugin.plugin
                 module = importlib.import_module("plugins.%s" % plugin_name)
@@ -148,20 +125,14 @@ class Application(object):
                     logger.setLevel(logging.DEBUG)
 
                 # Initialize the plugin instance and load configuration data
-                plugin_instance = module.Plugin(self, logger, home_path, plugin, configuration_data, event_handler=event_handler)
+                plugin_instance = module.Plugin(self, logger, home_path, plugin, configuration_data, domain=domain_instance)
+                print(plugin_instance)
                 plugin_instance.load_configuration(configuration=plugin, global_configuration=configuration_data.global_configuration)
-                self.loaded_plugins.append(plugin_instance)
-
-                #self.domains.setdefault(domain, [])
-                #self.domains[domain].append(bridge_instance)
-                #self.bridge_domains[bridge_instance] = domain
+                loaded_plugins.append(plugin_instance)
 
         # Once everything is mapped, start up all of the loaded bridges and addons.
-        for bridge in self.loaded_bridges:
-            bridge.start()
-
-        for plugin in self.loaded_plugins:
-            plugin.start()
+        for domain_instance in self.domains.values():
+            domain_instance.start()
 
         # Initilize other libs
         # FIXME: This is a quick hack to ensure jpeg gets a reasonable extension
@@ -181,8 +152,8 @@ class Application(object):
                 current_time = datetime.datetime.now()
                 delta_time = current_time - last_time
 
-                for bridge in self.loaded_bridges:
-                    bridge.update(delta_time)
+                for domain_instance in self.domains.values():
+                    domain_instance.update(delta_time)
 
                 if delta_time < process_sleepms:
                     slept_time = process_sleepms - delta_time
@@ -243,18 +214,8 @@ class Application(object):
                     self.logger.error("!!! Exiting because autorestart is not enabled!")
                     break
 
-            # Stop all running bridges and plugins
-            for plugin in self.loaded_plugins:
-                try:
-                    plugin.stop()
-                except BaseException as e:
-                    self.logger.error("!!! Error stopping plugin '%s': \n%s" % (plugin.configuration.name, traceback.format_exc()))
-
-            for bridge in self.loaded_bridges:
-                try:
-                    bridge.stop()
-                except BaseException as e:
-                    self.logger.error("!!! Error stopping bridge '%s': \n%s" % (bridge.configuration.name, traceback.format_exc()))
+            for domain_instance in self.domains.values():
+                domain_instance.stop()
 
             # All else fails, force the python interpreter to full exit
             if configuration_data.global_configuration.process_internal.auto_restart is False:

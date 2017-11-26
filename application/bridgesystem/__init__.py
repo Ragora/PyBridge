@@ -3,6 +3,7 @@
 """
 
 from .util import *
+from .domain import Domain
 from .userbase import UserBase
 from .bridgebase import BridgeBase
 from .pluginbase import PluginBase

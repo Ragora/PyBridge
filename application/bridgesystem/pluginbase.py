@@ -29,17 +29,17 @@ class PluginBase(object):
         The bot global configuration.
     """
 
-    event_handler = None
+    domain = None
     """
-        The event handler for this domain.
+        The domain this plugin is in.
     """
 
-    def __init__(self, application, logger, home_path, configuration, global_configuration, event_handler):
+    def __init__(self, application, logger, home_path, configuration, global_configuration, domain):
         self.logger = logger
+        self.domain = domain
         self.home_path = home_path
         self.application = application
         self.configuration = configuration
-        self.event_handler = event_handler
         self.global_configuration = global_configuration
 
         self.long_block_buffers = {}

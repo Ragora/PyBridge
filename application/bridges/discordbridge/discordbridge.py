@@ -199,7 +199,7 @@ class Bridge(BridgeBase):
             queued_calls = [self.discord_connection.logout(), self.discord_connection.close()]
             discord.compat.create_task(asyncio.wait(queued_calls))
 
-    def __init__(self, application, logger, home_path, configuration, global_configuration, event_handler):
+    def __init__(self, application, logger, home_path, configuration, global_configuration, domain):
         """
             Initializes a new Bridge instance.
 
@@ -209,7 +209,7 @@ class Bridge(BridgeBase):
             :param configuration: The configuration data for this bridge.
             :param global_configuration: The global configuration data for the bot.
         """
-        super(Bridge, self).__init__(application, logger, home_path, configuration, global_configuration, event_handler=event_handler)
+        super(Bridge, self).__init__(application, logger, home_path, configuration, global_configuration, domain=domain)
         self.discord_user_color_maps = {}
 
     def stop(self):
@@ -227,10 +227,10 @@ class Bridge(BridgeBase):
         self.user_instances = {}
         self.channel_instances = {}
 
-        self.event_handler.register_event(self.event_handler.Events.OnReceivePose, self.on_receive_pose)
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveJoin, self.on_receive_join)
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveLeave, self.on_receive_leave)
-        self.event_handler.register_event(self.event_handler.Events.OnReceiveMessage, self.on_receive_message)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceivePose, self.on_receive_pose)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveJoin, self.on_receive_join)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveLeave, self.on_receive_leave)
+        self.domain.event_handler.register_event(self.domain.event_handler.Events.OnReceiveMessage, self.on_receive_message)
 
         self.initialize_discord_connection()
 
@@ -353,9 +353,9 @@ class Bridge(BridgeBase):
                 message = Message(message_instance=message, sender=user, channels=channel, event_loop=self.discord_thread.loop, connection=self.discord_thread.discord_connection)
 
                 if channel is not None:
-                    self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
+                    self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
                 else:
-                    self.event_handler.broadcast_event(self.event_handler.Events.OnReceiveMessagePrivate, emitter=self, message=message)
+                    self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveMessagePrivate, emitter=self, message=message)
 
         self.discord_thread.outgoing_messages = []
         self.discord_thread.outgoing_lock.release()

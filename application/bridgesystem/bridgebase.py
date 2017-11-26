@@ -58,12 +58,12 @@ class BridgeBase(object):
         The logger associated with this bridge.
     """
 
-    event_handler = None
+    domain = None
     """
-        The event handler used by the domain this bridge is in.
+        The domain this bridge is in.
     """
 
-    def __init__(self, application, logger, home_path, configuration, global_configuration, event_handler):
+    def __init__(self, application, logger, home_path, configuration, global_configuration, domain):
         """
             Base initialize function to create empty lambdas for the base event types. Events of other types may be specified,
             but these at the least should be defined for interoperability.
@@ -71,11 +71,11 @@ class BridgeBase(object):
             :param configuration: The configuration data in use for this addon.
         """
         self.threads = []
+        self.domain = domain
         self.logger = logger
         self.home_path = home_path
         self.application = application
         self.configuration = configuration
-        self.event_handler = event_handler
         self.global_configuration = global_configuration
 
         self.long_block_buffers = {}
