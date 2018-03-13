@@ -20,14 +20,16 @@ class Channel(ChannelBase):
         The chat instance.
     """
 
-    def __init__(self, connection, chat_instance):
+    def __init__(self, connection, chat_instance, name=None):
         """
             :param connection: The Telegram connection object used to send and receive messages from the server.
             :param chat_instance: The telegram chat instance this channel is associated with.
         """
         self.connection = connection
         self.chat_instance = chat_instance
-        super(Channel, self).__init__(name=self.chat_instance.title, display_name=None, description=None, members=[])
+
+        name = name if name is not None else self.chat_instance.title
+        super(Channel, self).__init__(name=name, display_name=None, description=None, members=[])
 
     def send_message(self, message):
         """

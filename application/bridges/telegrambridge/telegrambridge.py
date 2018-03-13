@@ -88,10 +88,10 @@ class Bridge(BridgeBase):
 
         # For now, the channel set is always static
         self.channel_instances = {}
-        for identifiers in self.chat_mapping.values():
+        for name, identifiers in zip(self.chat_mapping.keys(), self.chat_mapping.values()):
             for identifier in identifiers:
                 chat_instance = self.connection.get_chat(chat_id=identifier)
-                self.channel_instances[identifier] = Channel(connection=self.connection, chat_instance=chat_instance)
+                self.channel_instances[identifier] = Channel(connection=self.connection, chat_instance=chat_instance, name=name)
 
     def register_user(self, user_instance):
         if user_instance.id in self.user_instances.keys():
