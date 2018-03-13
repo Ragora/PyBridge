@@ -112,6 +112,16 @@ class Connection(object):
         Handlers for the CTCP protocol.
     """
 
+    JOIN_DELAY = datetime.timedelta(seconds=2)
+    """
+        The delay at which the IRC client should wait before joining channels and requesting user lists.
+    """
+
+    join_time_expiry = None
+    """
+        The computed datetime to join channels and request user lists.
+    """
+
     def handle_ping(self, message, components):
         """
             Handler for a server PING command.
@@ -404,7 +414,6 @@ class Connection(object):
             "353": self.handle_user_list,
             "PONG": self.handle_pong,
             "JOIN": self.handle_join,
-            "004": self.handle_server_information,
         }
 
         self.ctcp_handlers = {
@@ -473,6 +482,8 @@ class Connection(object):
         self.socket.connect(self.connection_info)
         self.socket.setblocking(False)
         self.socket.settimeout(0.03)
+
+        self.join_time_expiry = datetime.datetime.now() + self.JOIN_DELAY
         return True
 
     def send(self, string):
@@ -531,6 +542,13 @@ class Connection(object):
             :param delta_time: The time since the last time this update function was called.
         """
         current_time = datetime.datetime.now()
+
+        if self.join_time_expiry is not None and current_time >= self.join_time_expiry:
+            self.join_time_expiry = None
+
+            # FIXME: Don't use a command handler for this.
+            self.handle_server_information(message=None, components=None)
+
         if self.ping_delay is not None and current_time - self.last_ping_time >= self.ping_delay:
             self.send("PING :DRAGON\r\n")
             self.last_ping_time = datetime.datetime.now()
