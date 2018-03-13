@@ -19,7 +19,7 @@ class Message(MessageBase):
         The telegram message instance.
     """
 
-    def __init__(self, sender, message_instance, connection, channels):
+    def __init__(self, sender, message_instance, connection, channels, text=None):
         """
             Initializes a new Telegram message.
 
@@ -28,7 +28,9 @@ class Message(MessageBase):
             :param raw_text: The IRC message text.
             :param channels: A list of ChannelBase objects that this message was sent to.
         """
-        super(Message, self).__init__(raw_text=message_instance.text, channels=channels, sender=sender, pinned=message_instance.pinned_message is not None)
+
+        text = text if text is not None else message_instance.text
+        super(Message, self).__init__(raw_text=text, channels=channels, sender=sender, pinned=message_instance.pinned_message is not None)
         self.connection = connection
         self.message_instance = message_instance
 

@@ -362,7 +362,7 @@ class Bridge(BridgeBase):
                     # Dispatch the message
                     if self.configuration.bridge_generic_config.broadcast_messages:
                         sender = self.register_user(update.message.from_user)
-                        message = Message(connection=self.connection, sender=sender, message_instance=update.message, channels=self.channel_instances[chat_identifier])
+                        message = Message(connection=self.connection, sender=sender, message_instance=update.message, channels=self.channel_instances[chat_identifier], text=message_text)
                         self.domain.event_handler.broadcast_event(self.domain.event_handler.Events.OnReceiveMessage, emitter=self, message=message)
         except telegram.error.TimedOut as e:
             pass
